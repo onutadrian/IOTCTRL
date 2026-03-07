@@ -423,19 +423,36 @@ private struct DeviceGridCardView: View {
 
     private var brightnessRow: some View {
         let current = brightnessDraft ?? Double(device.brightness ?? 0)
+        let clampedCurrent = min(max(current, 0), 100)
         let hasKnownBrightness = brightnessDraft != nil || device.brightness != nil
+        let labelText = hasKnownBrightness ? "\(Int(clampedCurrent.rounded()))%" : "--"
 
         return VStack(alignment: .leading, spacing: 4) {
-            Text(hasKnownBrightness ? "\(Int(current.rounded()))%" : "--")
-                .font(.figmaMonoMedium(size: 10))
-                .tracking(0.3)
-                .foregroundStyle(Color(red: 0x8F / 255.0, green: 0x8F / 255.0, blue: 0x8F / 255.0))
-                .frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: 6) {
+                Color.clear.frame(width: 12, height: 12)
+
+                GeometryReader { proxy in
+                    let width = max(proxy.size.width, 1)
+                    let labelWidth: CGFloat = 36
+                    let desiredCenter = hasKnownBrightness ? (CGFloat(clampedCurrent / 100.0) * width) : (width / 2)
+                    let clampedCenter = min(max(desiredCenter, labelWidth / 2), width - labelWidth / 2)
+
+                    Text(labelText)
+                        .font(.figmaMonoMedium(size: 10))
+                        .tracking(0.3)
+                        .foregroundStyle(Color(red: 0x8F / 255.0, green: 0x8F / 255.0, blue: 0x8F / 255.0))
+                        .frame(width: labelWidth, alignment: .center)
+                        .position(x: clampedCenter, y: proxy.size.height / 2)
+                }
+                .frame(height: 12)
+
+                Color.clear.frame(width: 24, height: 24)
+            }
 
             HStack(spacing: 6) {
                 figmaIcon("icon_brightness_min", width: 12, height: 12)
 
-                GridBrightnessTrack(value: current) { draft in
+                GridBrightnessTrack(value: clampedCurrent) { draft in
                     brightnessDraft = draft
                 } onCommit: { committed in
                     brightnessDraft = committed
@@ -446,6 +463,7 @@ private struct DeviceGridCardView: View {
                 figmaIcon("icon_brightness_max", width: 24, height: 24)
             }
         }
+        .animation(.easeOut(duration: 0.08), value: clampedCurrent)
     }
 
     @ViewBuilder
@@ -478,35 +496,23 @@ private struct DeviceCardSkeletonView: View {
                 )
 
             HStack(alignment: .top, spacing: 24) {
-                Circle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 43.498, height: 43.498)
+                skeletonCircle(size: 43.498, baseOpacity: 0.08)
                     .padding(.top, 37.75)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(Color.white.opacity(0.10))
-                        .frame(width: 54, height: 16)
+                    skeletonBar(width: 54, height: 16, cornerRadius: 2, baseOpacity: 0.10)
 
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(Color.white.opacity(0.12))
-                        .frame(width: 184, height: 11)
+                    skeletonBar(width: 184, height: 11, cornerRadius: 3, baseOpacity: 0.12)
 
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .frame(width: 88, height: 8)
+                    skeletonBar(width: 88, height: 8, cornerRadius: 2, baseOpacity: 0.08)
 
                     Spacer(minLength: 0)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
-                            .frame(width: 24, height: 8)
+                        skeletonBar(width: 24, height: 8, cornerRadius: 2, baseOpacity: 0.08)
                             .frame(maxWidth: .infinity, alignment: .center)
 
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(Color.white.opacity(0.10))
-                            .frame(width: 184, height: 4)
+                        skeletonBar(width: 184, height: 4, cornerRadius: 2, baseOpacity: 0.10)
                     }
                 }
                 .frame(width: 184, height: 119, alignment: .topLeading)
@@ -514,7 +520,6 @@ private struct DeviceCardSkeletonView: View {
             .padding(16)
         }
         .frame(width: 299.498, height: 167)
-        .overlay(shimmerOverlay.mask(RoundedRectangle(cornerRadius: 40, style: .continuous)))
         .onAppear {
             withAnimation(.linear(duration: 1.15).repeatForever(autoreverses: false)) {
                 shimmerPhase = 1.2
@@ -522,19 +527,44 @@ private struct DeviceCardSkeletonView: View {
         }
     }
 
-    private var shimmerOverlay: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let x = shimmerPhase * width
-            LinearGradient(
-                colors: [Color.clear, Color.white.opacity(0.14), Color.clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: width * 0.38, height: proxy.size.height)
-            .rotationEffect(.degrees(12))
-            .offset(x: x)
-        }
+    private func skeletonCircle(size: CGFloat, baseOpacity: Double) -> some View {
+        Circle()
+            .fill(Color.white.opacity(baseOpacity))
+            .overlay {
+                GeometryReader { proxy in
+                    shimmerBand(width: proxy.size.width, height: proxy.size.height)
+                }
+                .mask(Circle())
+            }
+            .frame(width: size, height: size)
+    }
+
+    private func skeletonBar(
+        width: CGFloat,
+        height: CGFloat,
+        cornerRadius: CGFloat,
+        baseOpacity: Double
+    ) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.white.opacity(baseOpacity))
+            .overlay {
+                GeometryReader { proxy in
+                    shimmerBand(width: proxy.size.width, height: proxy.size.height)
+                }
+                .mask(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            }
+            .frame(width: width, height: height)
+    }
+
+    private func shimmerBand(width: CGFloat, height: CGFloat) -> some View {
+        LinearGradient(
+            colors: [Color.clear, Color.white.opacity(0.16), Color.clear],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(width: max(width * 0.58, 18), height: height)
+        .rotationEffect(.degrees(12))
+        .offset(x: shimmerPhase * width)
     }
 }
 
